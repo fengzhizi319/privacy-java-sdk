@@ -435,4 +435,40 @@ public class ClassificationApi {
         auditInfo.setRuleEngineVersion(ruleEngine.getVersion());
         return auditInfo;
     }
+
+    /**
+     * 从 ResultSet 读取结果并进行分类。
+     *
+     * @param rs     ResultSet 实例，由调用方负责关闭
+     * @param params 请求参数，可为 {@code null}
+     * @return 表级分类结果
+     * @throws RuntimeException 当 SQL 操作失败时抛出
+     */
+    public TableClassificationResult classifyResultSet(java.sql.ResultSet rs, Map<String, Object> params) {
+        if (rs == null) {
+            throw new IllegalArgumentException("ResultSet is null");
+        }
+        try {
+            java.sql.ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            List<String> schema = new ArrayList<>(columnCount);
+            for (int i = 1; i <= columnCount; i++) {
+                schema.add(metaData.getColumnLabel(i));
+            }
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (rs.next()) {
+                Map<String, Object> record = new LinkedHashMap<>(columnCount);
+                for (int i = 1; i <= columnCount; i++) {
+                    String colName = metaData.getColumnLabel(i);
+                    Object val = rs.getObject(i);
+                    record.put(colName, val);
+                }
+                rows.add(record);
+            }
+            return classifyTable(schema, rows, params);
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException("Failed to classify ResultSet", e);
+        }
+    }
 }

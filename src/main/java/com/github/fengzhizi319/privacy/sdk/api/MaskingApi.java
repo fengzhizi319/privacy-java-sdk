@@ -203,4 +203,27 @@ public class MaskingApi {
         }
         return "default";
     }
+
+    /**
+     * 对 map 中的每个字符串值按字段名进行脱敏，非字符串值保持原样。
+     *
+     * @param record  原始记录
+     * @param context 业务上下文标识
+     * @return 脱敏后的新记录映射；不会修改原 record 映射
+     */
+    public Map<String, Object> maskRecord(Map<String, Object> record, String context) {
+        if (record == null) {
+            return null;
+        }
+        Map<String, Object> out = new java.util.LinkedHashMap<>(record.size());
+        for (Map.Entry<String, Object> entry : record.entrySet()) {
+            Object v = entry.getValue();
+            if (v instanceof String val) {
+                out.put(entry.getKey(), maskValue(entry.getKey(), val, context));
+            } else {
+                out.put(entry.getKey(), v);
+            }
+        }
+        return out;
+    }
 }

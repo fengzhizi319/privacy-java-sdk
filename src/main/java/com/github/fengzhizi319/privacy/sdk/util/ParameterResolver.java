@@ -40,6 +40,15 @@ public class ParameterResolver {
     }
 
     /**
+     * 获取原始 profile 配置映射。
+     *
+     * @return profile 配置映射
+     */
+    public Map<String, Object> getProfile() {
+        return profile;
+    }
+
+    /**
      * 从指定 YAML 文件构造解析器。
      *
      * @param profilePath YAML 文件路径；若为 {@code null} 或文件不存在，则等效于空解析器

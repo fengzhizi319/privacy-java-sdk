@@ -4,12 +4,20 @@ import com.github.fengzhizi319.privacy.sdk.api.DpApi;
 import com.github.fengzhizi319.privacy.sdk.api.KAnonymityApi;
 import com.github.fengzhizi319.privacy.sdk.api.MaskingApi;
 import com.github.fengzhizi319.privacy.sdk.api.QolApi;
+import com.github.fengzhizi319.privacy.sdk.classification.ClassificationApi;
+import com.github.fengzhizi319.privacy.sdk.model.classification.ClassificationResult;
+import com.github.fengzhizi319.privacy.sdk.model.classification.FieldClassificationResult;
+import com.github.fengzhizi319.privacy.sdk.model.classification.RecordClassificationResult;
+import com.github.fengzhizi319.privacy.sdk.model.classification.TableClassificationResult;
 import com.github.fengzhizi319.privacy.sdk.util.BudgetAccountant;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * 隐私计算 Java SDK 的入口客户端（Privacy Client / Entry Point）。
  * <p>
- * 负责聚合四类隐私处理原语 API：脱敏（Masking）、差分隐私（DP）、K-匿名（K-Anonymity）、查询混淆（QoL）。
+ * 负责聚合脱敏（Masking）、差分隐私（DP）、K-匿名（K-Anonymity）、查询混淆（QoL）与数据敏感度分类（Classification）等数据处理能力。
  * 通过 {@link PrivacyProfile} 完成统一配置，通过 {@link BudgetAccountant} 统一管控隐私预算。
  * </p>
  *
@@ -23,6 +31,9 @@ public class PrivacyClient {
     /** 当前客户端关联的隐私配置 profile。 */
     private final PrivacyProfile profile;
 
+    /** 隐私预算记账本。 */
+    private final BudgetAccountant budget;
+
     /** 脱敏 API 实例。 */
     private final MaskingApi maskingApi;
 
@@ -34,6 +45,9 @@ public class PrivacyClient {
 
     /** 查询混淆（Query Obfuscation Layer）API 实例。 */
     private final QolApi qolApi;
+
+    /** 数据分类 API 实例。 */
+    private final ClassificationApi classificationApi;
 
     /**
      * 使用默认空配置构造客户端。
@@ -53,10 +67,16 @@ public class PrivacyClient {
      */
     public PrivacyClient(PrivacyProfile profile) {
         this.profile = profile;
+        String ns = profile.getNamespace();
+        if (ns == null || ns.isEmpty()) {
+            ns = "default";
+        }
+        this.budget = BudgetAccountant.getInstance(ns, 10.0, 1e-4);
         this.maskingApi = new MaskingApi();
-        this.dpApi = new DpApi(BudgetAccountant.getInstance("default", 10.0, 1e-4));
+        this.dpApi = new DpApi(this.budget);
         this.kAnonymityApi = new KAnonymityApi();
         this.qolApi = new QolApi();
+        this.classificationApi = new ClassificationApi(profile);
     }
 
     /**
@@ -67,10 +87,12 @@ public class PrivacyClient {
      */
     public PrivacyClient(PrivacyProfile profile, BudgetAccountant budget) {
         this.profile = profile;
+        this.budget = budget;
         this.maskingApi = new MaskingApi();
         this.dpApi = new DpApi(budget);
         this.kAnonymityApi = new KAnonymityApi();
         this.qolApi = new QolApi();
+        this.classificationApi = new ClassificationApi(profile);
     }
 
     /**
@@ -80,6 +102,15 @@ public class PrivacyClient {
      */
     public PrivacyProfile getProfile() {
         return profile;
+    }
+
+    /**
+     * 获取当前客户端关联的隐私预算记账本。
+     *
+     * @return {@link BudgetAccountant} 实例
+     */
+    public BudgetAccountant budget() {
+        return budget;
     }
 
     /**
@@ -116,5 +147,147 @@ public class PrivacyClient {
      */
     public QolApi qol() {
         return qolApi;
+    }
+
+    /**
+     * 获取数据分类 API。
+     *
+     * @return {@link ClassificationApi} 实例
+     */
+    public ClassificationApi classification() {
+        return classificationApi;
+    }
+
+    // --- 快捷原语封装方法 / Convenience Wrappers ---
+
+    /**
+     * 对单个字段值进行脱敏，是 masking().maskValue 的便捷封装。
+     */
+    public String maskValue(String fieldName, String value, String context) {
+        return maskingApi.maskValue(fieldName, value, context);
+    }
+
+    /**
+     * 返回基于 HMAC-SHA256 的确定性截断哈希值，是 masking().hashValue 的便捷封装。
+     */
+    public String hashValue(String value, String salt) {
+        return maskingApi.hashValue(value, salt);
+    }
+
+    /**
+     * 对字段值进行截断处理，是 masking().truncate 的便捷封装。
+     */
+    public String truncate(String value, int keepPrefix) {
+        return maskingApi.truncate(value, keepPrefix);
+    }
+
+    /**
+     * 对记录中所有字符串字段值进行脱敏，是 masking().maskRecord 的便捷封装。
+     */
+    public Map<String, Object> maskRecord(Map<String, Object> record, String context) {
+        return maskingApi.maskRecord(record, context);
+    }
+
+    /**
+     * 返回带差分隐私噪声的计数结果，是 dp().count 的便捷封装。
+     */
+    public double dpCount(List<Double> values, double epsilon, String mechanism) {
+        return dpApi.count(values, epsilon, mechanism);
+    }
+
+    /**
+     * 对真实计数值注入拉普拉斯噪声，是 dp().count 的便捷封装。
+     */
+    public double dpCount(long trueCount, double epsilon, String mechanism) {
+        return dpApi.count(trueCount, epsilon, mechanism);
+    }
+
+    /**
+     * 返回带差分隐私噪声的求和结果，是 dp().sum 的便捷封装。
+     */
+    public double dpSum(List<Double> values, double epsilon, String mechanism) {
+        return dpApi.sum(values, epsilon, mechanism);
+    }
+
+    /**
+     * 返回带差分隐私噪声的均值结果，是 dp().mean 的便捷封装。
+     */
+    public double dpMean(List<Double> values, double epsilon, String mechanism) {
+        return dpApi.mean(values, epsilon, mechanism);
+    }
+
+    /**
+     * 对单条记录按 K-匿名要求进行泛化，是 kAnonymity().anonymizeRecord 的便捷封装。
+     */
+    public Map<String, Object> kAnonymizeRecord(Map<String, Object> record,
+                                               List<String> qiCols,
+                                               Map<String, KAnonymityApi.GeneralizationHierarchy> hierarchies,
+                                               int k) {
+        return kAnonymityApi.anonymizeRecord(record, qiCols, hierarchies, k);
+    }
+
+    /**
+     * 在真实查询中混入若干假查询以隐藏真实意图，是 qol().obfuscateQuery 的便捷封装。
+     */
+    public List<String> obfuscateQuery(String query, int numDummies, String domain) {
+        return qolApi.obfuscateQuery(query, numDummies, domain);
+    }
+
+    /**
+     * 对单个字段进行分类，是 classification().classifyField 的便捷封装。
+     */
+    public FieldClassificationResult classifyField(String fieldName, Object value, Map<String, Object> params) {
+        return classificationApi.classifyField(fieldName, value, params);
+    }
+
+    /**
+     * 对单条记录进行分类，是 classification().classifyRecord 的便捷封装。
+     */
+    public RecordClassificationResult classifyRecord(Map<String, Object> record, Map<String, Object> params) {
+        return classificationApi.classifyRecord(record, params);
+    }
+
+    /**
+     * 对整张表进行分类，是 classification().classifyTable 的便捷封装。
+     */
+    public TableClassificationResult classifyTable(List<String> schema, List<Map<String, Object>> rows, Map<String, Object> params) {
+        return classificationApi.classifyTable(schema, rows, params);
+    }
+
+    /**
+     * 解析 JSON 字节并进行分类，是 classification().classifyJson 的便捷封装。
+     */
+    public ClassificationResult classifyJson(String jsonString, Map<String, Object> params) {
+        return classificationApi.classifyJson(jsonString, params);
+    }
+
+    /**
+     * 从 ResultSet 读取结果并进行分类，是 classification().classifyResultSet 的便捷封装。
+     */
+    public TableClassificationResult classifyResultSet(java.sql.ResultSet rs, Map<String, Object> params) {
+        return classificationApi.classifyResultSet(rs, params);
+    }
+
+    // --- 默认泛化层次结构便捷方法 / Default hierarchies ---
+
+    /**
+     * 返回年龄字段的默认泛化层次结构。
+     */
+    public static KAnonymityApi.GeneralizationHierarchy ageHierarchy() {
+        return KAnonymityApi.ageHierarchy();
+    }
+
+    /**
+     * 返回邮编字段的默认泛化层次结构。
+     */
+    public static KAnonymityApi.GeneralizationHierarchy zipcodeHierarchy() {
+        return KAnonymityApi.zipcodeHierarchy();
+    }
+
+    /**
+     * 返回性别字段的默认泛化层次结构。
+     */
+    public static KAnonymityApi.GeneralizationHierarchy genderHierarchy() {
+        return KAnonymityApi.genderHierarchy();
     }
 }

@@ -67,4 +67,19 @@ public class PrivacyProfile {
     public ParameterResolver getResolver() {
         return resolver;
     }
+
+    /**
+     * 获取配置中定义的命名空间。
+     *
+     * @return 命名空间字符串；若未定义或解析器为空，则返回 "default"
+     */
+    public String getNamespace() {
+        if (resolver != null && resolver.getProfile() != null) {
+            Object ns = resolver.getProfile().get("namespace");
+            if (ns != null) {
+                return ns.toString();
+            }
+        }
+        return "default";
+    }
 }
