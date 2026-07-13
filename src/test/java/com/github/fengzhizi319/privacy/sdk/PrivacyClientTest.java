@@ -31,9 +31,9 @@ class PrivacyClientTest {
 
     @Test
     void testDpWrappers() {
-        assertTrue(client.dpCount(100L, 1.0, "laplace") >= 0);
-        assertTrue(client.dpSum(List.of(1.0, 2.0, 3.0), 1.0, "laplace") > 0);
-        assertTrue(client.dpMean(List.of(10.0, 20.0, 30.0), 1.0, "laplace") > 0);
+        assertTrue(client.dpCount(100L, 1.0, 0.0, "laplace") >= 0);
+        assertTrue(client.dpSum(List.of(1.0, 2.0, 3.0), 1.0, 0.0, "laplace", null, null) > 0);
+        assertTrue(client.dpMean(List.of(10.0, 20.0, 30.0), 1.0, 0.0, "laplace", null, null) > 0);
     }
 
     @Test
@@ -47,7 +47,19 @@ class PrivacyClientTest {
         );
         assertEquals("[25-30]", generalized.get("age"));
 
-        List<String> obfuscated = client.obfuscateQuery("test", 3, "medical");
+        // Test Mondrian Table Anonymization
+        List<Map<String, Object>> rows = List.of(
+            Map.of("age", 25.0, "zipcode", "100001", "gender", "M", "disease", "A"),
+            Map.of("age", 26.0, "zipcode", "100002", "gender", "M", "disease", "B"),
+            Map.of("age", 27.0, "zipcode", "100003", "gender", "M", "disease", "C"),
+            Map.of("age", 55.0, "zipcode", "200001", "gender", "F", "disease", "D"),
+            Map.of("age", 56.0, "zipcode", "200002", "gender", "F", "disease", "E"),
+            Map.of("age", 57.0, "zipcode", "200003", "gender", "F", "disease", "F")
+        );
+        List<Map<String, Object>> resTable = client.kAnonymizeTable(rows, List.of("age", "zipcode", "gender"), 3, 10);
+        assertEquals(6, resTable.size());
+
+        List<String> obfuscated = client.obfuscateQuery("test", 3, "medical", null, null);
         assertEquals(4, obfuscated.size());
     }
 
@@ -100,5 +112,21 @@ class PrivacyClientTest {
         var tableResult = client.classifyResultSet(rs, null);
         assertEquals(SensitivityLevel.L3, tableResult.getFinalLevel());
         assertEquals("mobile", tableResult.getSchema().get(0));
+    }
+
+    @Test
+    void testRecommendAndSaveParams() throws Exception {
+        java.nio.file.Path yamlPath = java.nio.file.Path.of("personalized-profiles.yaml");
+        java.nio.file.Files.deleteIfExists(yamlPath);
+        try {
+            List<Double> values = List.of(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0);
+            List<Map<String, Object>> rows = List.of(Map.of("age", 20));
+            Map<String, Object> result = client.recommendAndSaveParams(values, rows, null);
+            assertNotNull(result.get("dp"));
+            assertNotNull(result.get("k_anonymity"));
+            assertTrue(java.nio.file.Files.exists(yamlPath));
+        } finally {
+            java.nio.file.Files.deleteIfExists(yamlPath);
+        }
     }
 }

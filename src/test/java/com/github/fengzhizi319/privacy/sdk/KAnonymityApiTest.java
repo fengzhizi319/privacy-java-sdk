@@ -45,4 +45,20 @@ class KAnonymityApiTest {
         assertEquals("*", result.get("gender"));
         assertEquals("胃癌", result.get("disease"));
     }
+
+    @Test
+    void testKAnonymizeTable() {
+        java.util.List<Map<String, Object>> rows = java.util.List.of(
+            Map.of("age", 25.0, "zipcode", "100001", "gender", "M", "disease", "A"),
+            Map.of("age", 26.0, "zipcode", "100002", "gender", "M", "disease", "B"),
+            Map.of("age", 27.0, "zipcode", "100003", "gender", "M", "disease", "C"),
+            Map.of("age", 55.0, "zipcode", "200001", "gender", "F", "disease", "D"),
+            Map.of("age", 56.0, "zipcode", "200002", "gender", "F", "disease", "E"),
+            Map.of("age", 57.0, "zipcode", "200003", "gender", "F", "disease", "F")
+        );
+        java.util.List<Map<String, Object>> result = api.kAnonymizeTable(
+            rows, java.util.List.of("age", "zipcode", "gender"), 3, 10
+        );
+        assertEquals(6, result.size());
+    }
 }

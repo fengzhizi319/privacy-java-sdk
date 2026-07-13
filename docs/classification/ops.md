@@ -128,3 +128,4 @@ ClassificationApi api = new ClassificationApi(
 
 ### Q: 分类结果可用于做什么？
 A: 可作为脱敏策略路由输入、字段访问控制标签、合规审计日志、SecretFlow 组件元数据。
+

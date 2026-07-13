@@ -28,7 +28,7 @@ class DpApiTest {
      */
     @Test
     void testDpCount() {
-        double result = api.count(100L, 1.0, "laplace");
+        double result = api.count(100L, 1.0, 0.0, "laplace");
         assertTrue(result >= 0);
         assertTrue(Math.abs(result - 100) < 20);
     }
@@ -39,7 +39,7 @@ class DpApiTest {
     @Test
     void testDpSum() {
         List<Double> values = List.of(1.0, 2.0, 3.0, 4.0, 5.0);
-        double result = api.sum(values, 1.0, "laplace");
+        double result = api.sum(values, 1.0, 0.0, "laplace", null, null);
         assertTrue(Math.abs(result - 15.0) < 10.0);
     }
 
@@ -49,7 +49,7 @@ class DpApiTest {
     @Test
     void testDpMean() {
         List<Double> values = List.of(10.0, 20.0, 30.0, 40.0);
-        double result = api.mean(values, 1.0, "laplace");
+        double result = api.mean(values, 1.0, 0.0, "laplace", null, null);
         assertTrue(Math.abs(result - 25.0) < 15.0);
     }
 
@@ -60,6 +60,6 @@ class DpApiTest {
     void testBudgetExhausted() {
         BudgetAccountant smallBudget = BudgetAccountant.getInstance("test-dp-small", 0.01, 1e-6);
         DpApi smallApi = new DpApi(smallBudget);
-        assertThrows(RuntimeException.class, () -> smallApi.count(10L, 1.0, "laplace"));
+        assertThrows(RuntimeException.class, () -> smallApi.count(10L, 1.0, 0.0, "laplace"));
     }
 }

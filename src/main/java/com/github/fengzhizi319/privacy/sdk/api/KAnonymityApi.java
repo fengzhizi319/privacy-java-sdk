@@ -187,4 +187,213 @@ public class KAnonymityApi {
             }
         };
     }
+
+    /**
+     * 对整张表使用 Mondrian 多维分区算法执行 K-匿名表格泛化。
+     */
+    public List<Map<String, Object>> kAnonymizeTable(List<Map<String, Object>> rows, List<String> qiCols, int k, int maxDepth) {
+        if (rows == null || rows.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        int n = rows.size();
+        if (n < k) {
+            throw new IllegalArgumentException(String.format("Input table has %d rows, but k-anonymity requires at least %d", n, k));
+        }
+        if (qiCols == null || qiCols.isEmpty()) {
+            throw new IllegalArgumentException("qiCols must not be empty");
+        }
+        for (String col : qiCols) {
+            if (!rows.get(0).containsKey(col)) {
+                throw new IllegalArgumentException(String.format("qiCol '%s' not found in rows", col));
+            }
+        }
+
+        return mondrian(rows, qiCols, k, maxDepth);
+    }
+
+    private List<Map<String, Object>> mondrian(List<Map<String, Object>> records, List<String> qiCols, int k, int depth) {
+        if (records.size() < 2 * k || depth <= 0) {
+            return generalize(records, qiCols);
+        }
+        String dim = chooseDimension(records, qiCols);
+        int splitIdx = medianSplit(records, dim, k);
+        if (splitIdx == -1) {
+            return generalize(records, qiCols);
+        }
+
+        List<Map<String, Object>> sortedRecords = new java.util.ArrayList<>(records);
+        sortRecords(sortedRecords, dim);
+
+        List<Map<String, Object>> left = mondrian(sortedRecords.subList(0, splitIdx), qiCols, k, depth - 1);
+        List<Map<String, Object>> right = mondrian(sortedRecords.subList(splitIdx, sortedRecords.size()), qiCols, k, depth - 1);
+
+        List<Map<String, Object>> result = new java.util.ArrayList<>(left.size() + right.size());
+        result.addAll(left);
+        result.addAll(right);
+        return result;
+    }
+
+    private boolean isNumeric(Object val) {
+        return val instanceof Number;
+    }
+
+    private double toDouble(Object val) {
+        if (val instanceof Number) {
+            return ((Number) val).doubleValue();
+        }
+        return 0.0;
+    }
+
+    private double span(List<Map<String, Object>> records, String col) {
+        java.util.List<Object> vals = new java.util.ArrayList<>();
+        for (Map<String, Object> r : records) {
+            Object v = r.get(col);
+            if (v != null) {
+                vals.add(v);
+            }
+        }
+        if (vals.isEmpty()) {
+            return 0.0;
+        }
+        boolean allNum = true;
+        for (Object v : vals) {
+            if (!isNumeric(v)) {
+                allNum = false;
+                break;
+            }
+        }
+        if (allNum) {
+            double minVal = toDouble(vals.get(0));
+            double maxVal = toDouble(vals.get(0));
+            for (Object v : vals) {
+                double f = toDouble(v);
+                if (f < minVal) minVal = f;
+                if (f > maxVal) maxVal = f;
+            }
+            return maxVal - minVal;
+        }
+
+        java.util.Set<String> unique = new java.util.HashSet<>();
+        for (Object v : vals) {
+            unique.add(v.toString());
+        }
+        return unique.size() - 1;
+    }
+
+    private String chooseDimension(List<Map<String, Object>> records, List<String> qiCols) {
+        String maxCol = qiCols.get(0);
+        double maxSpan = span(records, maxCol);
+        for (int i = 1; i < qiCols.size(); i++) {
+            String col = qiCols.get(i);
+            double s = span(records, col);
+            if (s > maxSpan) {
+                maxSpan = s;
+                maxCol = col;
+            }
+        }
+        return maxCol;
+    }
+
+    private int medianSplit(List<Map<String, Object>> records, String dim, int k) {
+        int n = records.size();
+        if (n < 2 * k) {
+            return -1;
+        }
+
+        List<Map<String, Object>> sortedRecords = new java.util.ArrayList<>(records);
+        sortRecords(sortedRecords, dim);
+
+        int mid = n / 2;
+        int splitIdx = Math.max(k, Math.min(mid, n - k));
+        if (splitIdx < k || n - splitIdx < k) {
+            return -1;
+        }
+        return splitIdx;
+    }
+
+    private void sortRecords(List<Map<String, Object>> records, String dim) {
+        records.sort((r1, r2) -> {
+            Object v1 = r1.get(dim);
+            Object v2 = r2.get(dim);
+            if (isNumeric(v1) && isNumeric(v2)) {
+                return Double.compare(toDouble(v1), toDouble(v2));
+            }
+            String s1 = v1 == null ? "" : v1.toString();
+            String s2 = v2 == null ? "" : v2.toString();
+            return s1.compareTo(s2);
+        });
+    }
+
+    private List<Map<String, Object>> generalize(List<Map<String, Object>> records, List<String> qiCols) {
+        if (records == null || records.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        Map<String, Object> generalized = new HashMap<>();
+        for (String col : qiCols) {
+            java.util.List<Object> vals = new java.util.ArrayList<>();
+            for (Map<String, Object> r : records) {
+                Object v = r.get(col);
+                if (v != null) {
+                    vals.add(v);
+                }
+            }
+            if (vals.isEmpty()) {
+                continue;
+            }
+            boolean allNum = true;
+            for (Object v : vals) {
+                if (!isNumeric(v)) {
+                    allNum = false;
+                    break;
+                }
+            }
+            if (allNum) {
+                double minVal = toDouble(vals.get(0));
+                double maxVal = toDouble(vals.get(0));
+                for (Object v : vals) {
+                    double f = toDouble(v);
+                    if (f < minVal) minVal = f;
+                    if (f > maxVal) maxVal = f;
+                }
+                if (minVal == maxVal) {
+                    generalized.put(col, minVal);
+                } else {
+                    // Check if they are integers to avoid floating point formatting if possible
+                    if (minVal == (long) minVal && maxVal == (long) maxVal) {
+                        generalized.put(col, String.format("[%d-%d]", (long) minVal, (long) maxVal));
+                    } else {
+                        generalized.put(col, String.format("[%s-%s]", String.valueOf(minVal), String.valueOf(maxVal)));
+                    }
+                }
+            } else {
+                java.util.Set<String> uniqueSet = new java.util.HashSet<>();
+                for (Object v : vals) {
+                    uniqueSet.add(v.toString());
+                }
+                java.util.List<String> unique = new java.util.ArrayList<>(uniqueSet);
+                java.util.Collections.sort(unique);
+                if (unique.size() == 1) {
+                    generalized.put(col, unique.get(0));
+                } else {
+                    StringBuilder sb = new StringBuilder("{");
+                    for (int i = 0; i < unique.size(); i++) {
+                        if (i > 0) {
+                            sb.append(",");
+                        }
+                        sb.append(unique.get(i));
+                    }
+                    sb.append("}");
+                    generalized.put(col, sb.toString());
+                }
+            }
+        }
+
+        List<Map<String, Object>> result = new java.util.ArrayList<>(records.size());
+        for (Map<String, Object> r : records) {
+            Map<String, Object> newRec = new HashMap<>(r);
+            newRec.putAll(generalized);
+            result.add(newRec);
+        }
+        return result;
+    }
 }

@@ -24,7 +24,7 @@ class QolApiTest {
     @Test
     void testObfuscateQuery() {
         String real = "糖尿病患者用药趋势";
-        List<String> result = api.obfuscateQuery(real, 3, "medical");
+        List<String> result = api.obfuscateQuery(real, 3, "medical", null, null);
         assertEquals(4, result.size());
         assertTrue(result.contains(real));
     }

@@ -471,4 +471,5 @@ public class ClassificationApi {
             throw new RuntimeException("Failed to classify ResultSet", e);
         }
     }
+
 }

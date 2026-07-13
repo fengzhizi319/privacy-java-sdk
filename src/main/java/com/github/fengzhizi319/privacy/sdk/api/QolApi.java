@@ -30,10 +30,20 @@ public class QolApi {
      * @param domain     领域标识，例如 "medical"；非 medical 时使用通用语料池
      * @return 包含真实查询与虚拟查询的列表，总长度为 {@code numDummies + 1}
      */
-    public List<String> obfuscateQuery(String query, int numDummies, String domain) {
+    /**
+     * 将真实查询混入指定数量的虚拟查询中，并随机插入到结果列表的某个位置。
+     */
+    public List<String> obfuscateQuery(String query, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
+        List<String> pool;
+        if ("medical".equalsIgnoreCase(domain)) {
+            pool = (medicalPool != null && !medicalPool.isEmpty()) ? medicalPool : getBuiltInMedicalPool();
+        } else {
+            pool = (genericPool != null && !genericPool.isEmpty()) ? genericPool : getBuiltInGenericPool();
+        }
+
         List<String> dummies = new ArrayList<>();
         for (int i = 0; i < numDummies; i++) {
-            dummies.add(generateDummy(domain));
+            dummies.add(pool.get(random.nextInt(pool.size())));
         }
         // insert real query at random position
         int pos = random.nextInt(dummies.size() + 1);
@@ -41,28 +51,23 @@ public class QolApi {
         return dummies;
     }
 
-    /**
-     * 根据领域随机生成一条虚拟查询。
-     *
-     * @param domain 领域标识
-     * @return 随机选择的虚拟查询字符串
-     */
-    private String generateDummy(String domain) {
-        List<String> medical = List.of(
+    private List<String> getBuiltInMedicalPool() {
+        return List.of(
             "高血压患者的日常饮食建议",
             "糖尿病患者运动注意事项",
             "冠心病的早期症状有哪些",
             "流感疫苗接种人群建议",
             "儿童常见过敏反应处理"
         );
-        List<String> generic = List.of(
+    }
+
+    private List<String> getBuiltInGenericPool() {
+        return List.of(
             "天气预报查询",
             "附近医院挂号流程",
             "健康档案如何查询",
             "医保报销比例说明",
             "体检报告解读指南"
         );
-        List<String> pool = "medical".equalsIgnoreCase(domain) ? medical : generic;
-        return pool.get(random.nextInt(pool.size()));
     }
 }

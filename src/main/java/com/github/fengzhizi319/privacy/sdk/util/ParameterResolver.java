@@ -88,14 +88,83 @@ public class ParameterResolver {
         params.putAll(templateParams(primitive));
         // 3. profile primitive params
         params.putAll(profileParams(primitive));
-        // 4. context overrides
+        // 4. personalized params
+        params.putAll(personalizedParams(primitive, context));
+        // 5. context overrides
         params.putAll(contextOverrides(primitive, context));
-        // 5. request params (highest priority)
+        // 6. request params (highest priority)
         if (requestParams != null) {
             params.putAll(requestParams);
         }
         validate(primitive, params);
         return params;
+    }
+
+    /**
+     * 从 personalized-profiles.yaml 加载指定命名空间的个性化参数覆盖。
+     */
+    private Map<String, Object> personalizedParams(String primitive, PrivacyContext context) {
+        String namespace = context != null ? context.getNamespace() : null;
+        if (namespace == null || namespace.isEmpty()) {
+            namespace = "default";
+        }
+        String pathStr = System.getenv("PRIVACY_PERSONALIZED_PROFILE");
+        if (pathStr == null || pathStr.isEmpty()) {
+            pathStr = "personalized-profiles.yaml";
+        }
+        Path path = Path.of(pathStr);
+        if (Files.exists(path)) {
+            try (InputStream is = Files.newInputStream(path)) {
+                Yaml yaml = new Yaml();
+                Object loaded = yaml.load(is);
+                if (loaded instanceof Map) {
+                    Map<String, Object> root = (Map<String, Object>) loaded;
+                    Object nsConfig = root.get(namespace);
+                    if (nsConfig instanceof Map) {
+                        Object primConfig = ((Map<String, Object>) nsConfig).get(primitive);
+                        if (primConfig instanceof Map) {
+                            return new HashMap<>((Map<String, Object>) primConfig);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[-] Warning: Failed to load personalized profile: " + e.getMessage());
+            }
+        }
+        return new HashMap<>();
+    }
+
+    /**
+     * 持久化保存推荐的个性化参数到 personalized-profiles.yaml。
+     */
+    public static void savePersonalizedParams(String namespace, String primitive, Map<String, Object> params) {
+        String pathStr = System.getenv("PRIVACY_PERSONALIZED_PROFILE");
+        if (pathStr == null || pathStr.isEmpty()) {
+            pathStr = "personalized-profiles.yaml";
+        }
+        Path path = Path.of(pathStr);
+        Map<String, Object> root = new HashMap<>();
+        Yaml yaml = new Yaml();
+        if (Files.exists(path)) {
+            try (InputStream is = Files.newInputStream(path)) {
+                Object loaded = yaml.load(is);
+                if (loaded instanceof Map) {
+                    root = new HashMap<>((Map<String, Object>) loaded);
+                }
+            } catch (Exception e) {
+                System.err.println("[-] Warning: Failed to read personalized profile for saving: " + e.getMessage());
+            }
+        }
+
+        Map<String, Object> nsConfig = (Map<String, Object>) root.computeIfAbsent(namespace, k -> new HashMap<String, Object>());
+        Map<String, Object> primConfig = (Map<String, Object>) nsConfig.computeIfAbsent(primitive, k -> new HashMap<String, Object>());
+        primConfig.putAll(params);
+
+        try (java.io.Writer writer = Files.newBufferedWriter(path)) {
+            yaml.dump(root, writer);
+        } catch (Exception e) {
+            System.err.println("[-] Error: Failed to save personalized profile: " + e.getMessage());
+        }
     }
 
     /**

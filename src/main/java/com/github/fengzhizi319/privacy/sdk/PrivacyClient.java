@@ -11,6 +11,7 @@ import com.github.fengzhizi319.privacy.sdk.model.classification.RecordClassifica
 import com.github.fengzhizi319.privacy.sdk.model.classification.TableClassificationResult;
 import com.github.fengzhizi319.privacy.sdk.util.BudgetAccountant;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -191,29 +192,29 @@ public class PrivacyClient {
     /**
      * 返回带差分隐私噪声的计数结果，是 dp().count 的便捷封装。
      */
-    public double dpCount(List<Double> values, double epsilon, String mechanism) {
-        return dpApi.count(values, epsilon, mechanism);
+    public double dpCount(List<Double> values, double epsilon, double delta, String mechanism) {
+        return dpApi.count(values, epsilon, delta, mechanism);
     }
 
     /**
-     * 对真实计数值注入拉普拉斯噪声，是 dp().count 的便捷封装。
+     * 对真实计数值注入加噪结果，是 dp().count 的便捷封装。
      */
-    public double dpCount(long trueCount, double epsilon, String mechanism) {
-        return dpApi.count(trueCount, epsilon, mechanism);
+    public double dpCount(long trueCount, double epsilon, double delta, String mechanism) {
+        return dpApi.count(trueCount, epsilon, delta, mechanism);
     }
 
     /**
      * 返回带差分隐私噪声的求和结果，是 dp().sum 的便捷封装。
      */
-    public double dpSum(List<Double> values, double epsilon, String mechanism) {
-        return dpApi.sum(values, epsilon, mechanism);
+    public double dpSum(List<Double> values, double epsilon, double delta, String mechanism, Double clipLower, Double clipUpper) {
+        return dpApi.sum(values, epsilon, delta, mechanism, clipLower, clipUpper);
     }
 
     /**
      * 返回带差分隐私噪声的均值结果，是 dp().mean 的便捷封装。
      */
-    public double dpMean(List<Double> values, double epsilon, String mechanism) {
-        return dpApi.mean(values, epsilon, mechanism);
+    public double dpMean(List<Double> values, double epsilon, double delta, String mechanism, Double clipLower, Double clipUpper) {
+        return dpApi.mean(values, epsilon, delta, mechanism, clipLower, clipUpper);
     }
 
     /**
@@ -227,10 +228,17 @@ public class PrivacyClient {
     }
 
     /**
+     * 对整张表使用 Mondrian 算法进行 K-匿名泛化，是 kAnonymity().kAnonymizeTable 的便捷封装。
+     */
+    public List<Map<String, Object>> kAnonymizeTable(List<Map<String, Object>> rows, List<String> qiCols, int k, int maxDepth) {
+        return kAnonymityApi.kAnonymizeTable(rows, qiCols, k, maxDepth);
+    }
+
+    /**
      * 在真实查询中混入若干假查询以隐藏真实意图，是 qol().obfuscateQuery 的便捷封装。
      */
-    public List<String> obfuscateQuery(String query, int numDummies, String domain) {
-        return qolApi.obfuscateQuery(query, numDummies, domain);
+    public List<String> obfuscateQuery(String query, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
+        return qolApi.obfuscateQuery(query, numDummies, domain, medicalPool, genericPool);
     }
 
     /**
@@ -289,5 +297,76 @@ public class PrivacyClient {
      */
     public static KAnonymityApi.GeneralizationHierarchy genderHierarchy() {
         return KAnonymityApi.genderHierarchy();
+    }
+
+    /**
+     * 根据输入数据特点，自动推荐差分隐私（DP）和 K-匿名（K-Anonymity）参数并持久化保存。
+     *
+     * @param values   待分析的 DP 数值列表，可为 {@code null}
+     * @param rows     待分析的 K-Anonymity 表格数据列表，可为 {@code null}
+     * @param qiCols   准标识符列，可为 {@code null}
+     * @return 推荐的参数映射
+     */
+    public Map<String, Object> recommendAndSaveParams(List<Double> values, List<Map<String, Object>> rows, List<String> qiCols) {
+        Map<String, Object> recommendations = new HashMap<>();
+        String ns = profile != null ? profile.getNamespace() : "default";
+
+        // 1. 推荐差分隐私（DP）参数
+        if (values != null && !values.isEmpty()) {
+            int n = values.size();
+            List<Double> sortedVals = new java.util.ArrayList<>(values);
+            java.util.Collections.sort(sortedVals);
+
+            int p5Idx = (int) (n * 0.05);
+            int p95Idx = (int) (n * 0.95);
+            if (p95Idx >= n) {
+                p95Idx = n - 1;
+            }
+
+            double clipLower = sortedVals.get(p5Idx);
+            double clipUpper = sortedVals.get(p95Idx);
+            if (clipLower == clipUpper) {
+                clipLower -= 1.0;
+                clipUpper += 1.0;
+            }
+
+            double recommendedDelta = 1e-5;
+            if (n > 0) {
+                double val = 1.0 / (10.0 * n * n);
+                if (val < recommendedDelta) {
+                    recommendedDelta = val;
+                }
+            }
+
+            Map<String, Object> dpParams = Map.of(
+                "epsilon", 1.0,
+                "delta", recommendedDelta,
+                "mechanism", "laplace",
+                "clip_lower", clipLower,
+                "clip_upper", clipUpper
+            );
+            com.github.fengzhizi319.privacy.sdk.util.ParameterResolver.savePersonalizedParams(ns, "dp", dpParams);
+            recommendations.put("dp", dpParams);
+        }
+
+        // 2. 推荐 K-Anonymity 参数
+        if (rows != null && !rows.isEmpty()) {
+            int n = rows.size();
+            int recommendedK = n / 10;
+            if (recommendedK < 2) {
+                recommendedK = 2;
+            } else if (recommendedK > 10) {
+                recommendedK = 10;
+            }
+
+            Map<String, Object> kanoParams = Map.of(
+                "k", recommendedK,
+                "max_depth", 10
+            );
+            com.github.fengzhizi319.privacy.sdk.util.ParameterResolver.savePersonalizedParams(ns, "k_anonymity", kanoParams);
+            recommendations.put("k_anonymity", kanoParams);
+        }
+
+        return recommendations;
     }
 }
