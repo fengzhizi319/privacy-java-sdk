@@ -1,5 +1,10 @@
 # privacy-java-sdk
 
+[![CI](https://github.com/fengzhizi319/privacy-java-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/fengzhizi319/privacy-java-sdk/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Java](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://adoptium.net/)
+[![Maven Central](https://img.shields.io/maven-central/v/com.github.fengzhizi319/privacy-java-sdk.svg)](https://search.maven.org/artifact/com.github.fengzhizi319/privacy-java-sdk)
+
 > Java 本地隐私保护 SDK，直接以函数库形式集成到 Java 后端应用，支持脱敏、K-匿名、差分隐私、查询混淆四类处理原语，以及独立的数据分类能力。
 
 ## Processing Primitives（处理原语）

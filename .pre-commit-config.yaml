@@ -1,0 +1,20 @@
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-xml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/pre-commit/mirrors-checkstyle
+    rev: v10.17.0
+    hooks:
+      - id: checkstyle
+        args: ['-c', 'checkstyle.xml']
+        files: \.java$
