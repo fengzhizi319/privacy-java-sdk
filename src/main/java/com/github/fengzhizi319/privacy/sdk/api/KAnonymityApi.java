@@ -105,23 +105,30 @@ public class KAnonymityApi {
         return new GeneralizationHierarchy() {
             @Override
             public String generalize(String value, int level) {
-                int age = Integer.parseInt(value);
-                return switch (level) {
-                    case 0 -> value;
-                    case 1 -> {
-                        int start = (age / 5) * 5;
-                        yield String.format("[%d-%d]", start, start + 5);
-                    }
-                    case 2 -> {
-                        int start = (age / 10) * 10;
-                        yield String.format("[%d-%d]", start, start + 10);
-                    }
-                    case 3 -> {
-                        int start = (age / 20) * 20;
-                        yield String.format("[%d-%d]", start, start + 20);
-                    }
-                    default -> "*";
-                };
+                if (value == null) {
+                    return "*";
+                }
+                try {
+                    int age = Integer.parseInt(value);
+                    return switch (level) {
+                        case 0 -> value;
+                        case 1 -> {
+                            int start = (age / 5) * 5;
+                            yield String.format("[%d-%d]", start, start + 5);
+                        }
+                        case 2 -> {
+                            int start = (age / 10) * 10;
+                            yield String.format("[%d-%d]", start, start + 10);
+                        }
+                        case 3 -> {
+                            int start = (age / 20) * 20;
+                            yield String.format("[%d-%d]", start, start + 20);
+                        }
+                        default -> "*";
+                    };
+                } catch (NumberFormatException e) {
+                    return "*";
+                }
             }
 
             @Override

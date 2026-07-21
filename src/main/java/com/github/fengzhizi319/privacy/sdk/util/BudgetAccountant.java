@@ -47,8 +47,17 @@ public class BudgetAccountant {
      * @param namespace    命名空间
      * @param epsilonTotal epsilon 总预算，必须非负
      * @param deltaTotal   delta 总预算，必须非负
+     * @throws IllegalArgumentException 当 namespace 为空或预算为负时抛出
      */
     public BudgetAccountant(String namespace, double epsilonTotal, double deltaTotal) {
+        if (namespace == null || namespace.isEmpty()) {
+            throw new IllegalArgumentException("namespace must not be empty");
+        }
+        if (epsilonTotal < 0 || deltaTotal < 0) {
+            throw new IllegalArgumentException(
+                String.format("budget must be non-negative: epsilon=%.4f, delta=%.6f", epsilonTotal, deltaTotal)
+            );
+        }
         this.namespace = namespace;
         this.epsilonTotal = epsilonTotal;
         this.deltaTotal = deltaTotal;
@@ -57,7 +66,8 @@ public class BudgetAccountant {
     /**
      * 获取或创建指定 namespace 的预算记账本单例。
      * <p>
-     * 若该 namespace 已存在实例，则直接返回已有实例，忽略本次传入的预算参数；
+     * 若该 namespace 已存在实例，则返回已有实例；
+     * 若请求的总预算与已有实例不一致，则抛出 IllegalArgumentException，避免静默使用错误预算。
      * 若不存在，则使用传入参数创建新实例。
      * </p>
      *
@@ -65,9 +75,43 @@ public class BudgetAccountant {
      * @param epsilonTotal epsilon 总预算
      * @param deltaTotal   delta 总预算
      * @return 该 namespace 对应的 {@link BudgetAccountant} 实例
+     * @throws IllegalArgumentException 当 namespace 为空或预算不一致时抛出
      */
-    public static synchronized BudgetAccountant getInstance(String namespace, double epsilonTotal, double deltaTotal) {
-        return INSTANCES.computeIfAbsent(namespace, k -> new BudgetAccountant(k, epsilonTotal, deltaTotal));
+    public static BudgetAccountant getInstance(String namespace, double epsilonTotal, double deltaTotal) {
+        if (namespace == null || namespace.isEmpty()) {
+            throw new IllegalArgumentException("namespace must not be empty");
+        }
+        BudgetAccountant existing = INSTANCES.get(namespace);
+        if (existing != null) {
+            if (Double.compare(existing.epsilonTotal, epsilonTotal) != 0
+                || Double.compare(existing.deltaTotal, deltaTotal) != 0) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        "Budget mismatch for namespace '%s': existing=(epsilon=%.4f, delta=%.6f), requested=(epsilon=%.4f, delta=%.6f)",
+                        namespace, existing.epsilonTotal, existing.deltaTotal, epsilonTotal, deltaTotal
+                    )
+                );
+            }
+            return existing;
+        }
+        synchronized (BudgetAccountant.class) {
+            existing = INSTANCES.get(namespace);
+            if (existing != null) {
+                if (Double.compare(existing.epsilonTotal, epsilonTotal) != 0
+                    || Double.compare(existing.deltaTotal, deltaTotal) != 0) {
+                    throw new IllegalArgumentException(
+                        String.format(
+                            "Budget mismatch for namespace '%s': existing=(epsilon=%.4f, delta=%.6f), requested=(epsilon=%.4f, delta=%.6f)",
+                            namespace, existing.epsilonTotal, existing.deltaTotal, epsilonTotal, deltaTotal
+                        )
+                    );
+                }
+                return existing;
+            }
+            BudgetAccountant created = new BudgetAccountant(namespace, epsilonTotal, deltaTotal);
+            INSTANCES.put(namespace, created);
+            return created;
+        }
     }
 
     /**

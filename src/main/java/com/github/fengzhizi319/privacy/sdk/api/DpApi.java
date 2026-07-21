@@ -66,6 +66,24 @@ public class DpApi {
     }
 
     /**
+     * 统一校验 epsilon/delta/mechanism，返回规范化后的小写机制名。
+     * Centralized epsilon/delta/mechanism validation; returns the normalized lower-case mechanism.
+     */
+    private String validateParams(double epsilon, double delta, String mechanism) {
+        if (epsilon <= 0) {
+            throw new IllegalArgumentException("epsilon must be positive, got " + epsilon);
+        }
+        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
+        if (!"laplace".equals(mech) && !"gaussian".equals(mech)) {
+            throw new IllegalArgumentException("unsupported mechanism: " + mechanism);
+        }
+        if ("gaussian".equals(mech) && delta <= 0) {
+            throw new IllegalArgumentException("delta must be positive for Gaussian mechanism");
+        }
+        return mech;
+    }
+
+    /**
      * 对非零且非空的列表元素进行差分隐私计数。
      */
     public double count(List<Double> values, double epsilon, double delta, String mechanism) {
@@ -77,17 +95,7 @@ public class DpApi {
      * 对真实计数值注入噪声。
      */
     public double count(long trueCount, double epsilon, double delta, String mechanism) {
-        if (epsilon <= 0) {
-            throw new IllegalArgumentException("epsilon must be positive, got " + epsilon);
-        }
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        if (!"laplace".equals(mech) && !"gaussian".equals(mech)) {
-            throw new IllegalArgumentException("unsupported mechanism: " + mechanism);
-        }
-        if ("gaussian".equals(mech) && delta <= 0) {
-            throw new IllegalArgumentException("delta must be positive for Gaussian mechanism");
-        }
-
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
         double noise;
@@ -104,19 +112,9 @@ public class DpApi {
      * 对列表元素进行差分隐私求和。
      */
     public double sum(List<Double> values, double epsilon, double delta, String mechanism, Double clipLower, Double clipUpper) {
-        if (epsilon <= 0) {
-            throw new IllegalArgumentException("epsilon must be positive, got " + epsilon);
-        }
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        if (!"laplace".equals(mech) && !"gaussian".equals(mech)) {
-            throw new IllegalArgumentException("unsupported mechanism: " + mechanism);
-        }
-        if ("gaussian".equals(mech) && delta <= 0) {
-            throw new IllegalArgumentException("delta must be positive for Gaussian mechanism");
-        }
+        String mech = validateParams(epsilon, delta, mechanism);
 
-        budget.spend(epsilon, delta);
-
+        // Resolve and validate clip bounds before spending budget.
         double lower = 0;
         double upper = 0;
         if (clipLower != null && clipUpper != null) {
@@ -125,15 +123,27 @@ public class DpApi {
             }
             lower = clipLower;
             upper = clipUpper;
+        } else if (clipLower != null || clipUpper != null) {
+            throw new IllegalArgumentException("clipLower and clipUpper must be both provided or both omitted");
         } else {
             if ("gaussian".equals(mech)) {
                 throw new IllegalArgumentException("clipLower and clipUpper are required for Gaussian mechanism");
             }
             if (values != null && !values.isEmpty()) {
-                lower = values.stream().mapToDouble(v -> v == null ? 0.0 : v).min().orElse(0.0);
-                upper = values.stream().mapToDouble(v -> v == null ? 0.0 : v).max().orElse(0.0);
+                lower = upper = (values.get(0) == null ? 0.0 : values.get(0));
+                for (Double v : values) {
+                    double val = v == null ? 0.0 : v;
+                    if (val < lower) {
+                        lower = val;
+                    }
+                    if (val > upper) {
+                        upper = val;
+                    }
+                }
             }
         }
+
+        budget.spend(epsilon, delta);
 
         double trueSum = 0.0;
         for (Double v : values) {
@@ -154,7 +164,7 @@ public class DpApi {
 
         double noise;
         if ("laplace".equals(mech)) {
-            double scale = epsilon > 0 ? sensitivity / epsilon : 0.0;
+            double scale = sensitivity / epsilon;
             noise = sampleLaplace(scale);
         } else {
             if (sensitivity > 0) {
@@ -174,13 +184,7 @@ public class DpApi {
         if (values == null || values.isEmpty()) {
             return 0.0;
         }
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        if (!"laplace".equals(mech) && !"gaussian".equals(mech)) {
-            throw new IllegalArgumentException("unsupported mechanism: " + mechanism);
-        }
-        if ("gaussian".equals(mech) && delta <= 0) {
-            throw new IllegalArgumentException("delta must be positive for Gaussian mechanism");
-        }
+        validateParams(epsilon, delta, mechanism);
 
         double noisyCount = count(values.size(), epsilon / 2.0, delta / 2.0, mechanism);
         double noisySum = sum(values, epsilon / 2.0, delta / 2.0, mechanism, clipLower, clipUpper);
@@ -218,21 +222,21 @@ public class DpApi {
      * @return 分桶名到带噪计数的映射
      */
     public Map<String, Double> histogram(List<String> values, List<String> categories, double epsilon, double delta, String mechanism) {
-        validateParams(epsilon, delta, mechanism);
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        Map<String, Double> trueCounts = new HashMap<>();
+        Map<String, Double> trueCounts = new HashMap<>(categories.size() * 2);
         for (String cat : categories) {
             trueCounts.put(cat, 0.0);
         }
         for (String v : values) {
-            if (trueCounts.containsKey(v)) {
-                trueCounts.put(v, trueCounts.get(v) + 1.0);
+            Double c = trueCounts.get(v);
+            if (c != null) {
+                trueCounts.put(v, c + 1.0);
             }
         }
 
-        Map<String, Double> result = new HashMap<>();
+        Map<String, Double> result = new HashMap<>(trueCounts.size());
         for (Map.Entry<String, Double> entry : trueCounts.entrySet()) {
             double noise;
             if ("laplace".equals(mech)) {
@@ -256,10 +260,9 @@ public class DpApi {
      * @return 带噪声的计数值
      */
     public double noisyCount(double trueCount, double epsilon, double delta, String mechanism) {
-        validateParams(epsilon, delta, mechanism);
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
         double noise;
         if ("laplace".equals(mech)) {
             noise = sampleLaplace(1.0 / epsilon);
@@ -281,10 +284,9 @@ public class DpApi {
      * @return 带噪声的求和结果
      */
     public double noisySum(double trueSum, double sensitivity, double epsilon, double delta, String mechanism) {
-        validateParams(epsilon, delta, mechanism);
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
         double noise;
         if ("laplace".equals(mech)) {
             noise = sampleLaplace(sensitivity / epsilon);
@@ -328,11 +330,10 @@ public class DpApi {
      * @return 分桶名到带噪计数的映射
      */
     public Map<String, Double> noisyHistogram(Map<String, Double> trueCounts, double epsilon, double delta, String mechanism) {
-        validateParams(epsilon, delta, mechanism);
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        Map<String, Double> result = new HashMap<>();
+        Map<String, Double> result = new HashMap<>(trueCounts.size() * 2);
         for (Map.Entry<String, Double> entry : trueCounts.entrySet()) {
             double noise;
             if ("laplace".equals(mech)) {
@@ -360,10 +361,9 @@ public class DpApi {
         if (vectors == null || vectors.isEmpty()) {
             return new double[0];
         }
-        validateParams(epsilon, delta, mechanism);
+        String mech = validateParams(epsilon, delta, mechanism);
         budget.spend(epsilon, delta);
 
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
         int dim = vectors.get(0).length;
         double[] sum = new double[dim];
 
@@ -553,21 +553,5 @@ public class DpApi {
             }
         }
         return result;
-    }
-
-    /**
-     * 统一参数校验。
-     */
-    private void validateParams(double epsilon, double delta, String mechanism) {
-        if (epsilon <= 0) {
-            throw new IllegalArgumentException("epsilon must be positive, got " + epsilon);
-        }
-        String mech = mechanism == null ? "laplace" : mechanism.trim().toLowerCase();
-        if (!"laplace".equals(mech) && !"gaussian".equals(mech)) {
-            throw new IllegalArgumentException("unsupported mechanism: " + mechanism);
-        }
-        if ("gaussian".equals(mech) && delta <= 0) {
-            throw new IllegalArgumentException("delta must be positive for Gaussian mechanism");
-        }
     }
 }

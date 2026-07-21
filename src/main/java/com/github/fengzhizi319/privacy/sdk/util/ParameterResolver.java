@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * 隐私参数解析器（Parameter Resolver）。
@@ -32,6 +33,9 @@ import java.util.Map;
 public class ParameterResolver {
 
     private static final Logger log = LoggerFactory.getLogger(ParameterResolver.class);
+
+    /** 保护 personalized-profiles.yaml 并发读写的全局锁。 */
+    private static final ReentrantReadWriteLock FILE_LOCK = new ReentrantReadWriteLock();
 
     /** 从 YAML 加载的原始 profile 配置映射。 */
     private final Map<String, Object> profile;
@@ -117,23 +121,28 @@ public class ParameterResolver {
             pathStr = "personalized-profiles.yaml";
         }
         Path path = Path.of(pathStr);
-        if (Files.exists(path)) {
-            try (InputStream is = Files.newInputStream(path)) {
-                Yaml yaml = new Yaml();
-                Object loaded = yaml.load(is);
-                if (loaded instanceof Map) {
-                    Map<String, Object> root = (Map<String, Object>) loaded;
-                    Object nsConfig = root.get(namespace);
-                    if (nsConfig instanceof Map) {
-                        Object primConfig = ((Map<String, Object>) nsConfig).get(primitive);
-                        if (primConfig instanceof Map) {
-                            return new HashMap<>((Map<String, Object>) primConfig);
+        FILE_LOCK.readLock().lock();
+        try {
+            if (Files.exists(path)) {
+                try (InputStream is = Files.newInputStream(path)) {
+                    Yaml yaml = new Yaml();
+                    Object loaded = yaml.load(is);
+                    if (loaded instanceof Map) {
+                        Map<String, Object> root = (Map<String, Object>) loaded;
+                        Object nsConfig = root.get(namespace);
+                        if (nsConfig instanceof Map) {
+                            Object primConfig = ((Map<String, Object>) nsConfig).get(primitive);
+                            if (primConfig instanceof Map) {
+                                return new HashMap<>((Map<String, Object>) primConfig);
+                            }
                         }
                     }
+                } catch (Exception e) {
+                    log.warn("Failed to load personalized profile: {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("Failed to load personalized profile: {}", e.getMessage());
             }
+        } finally {
+            FILE_LOCK.readLock().unlock();
         }
         return new HashMap<>();
     }
@@ -147,27 +156,32 @@ public class ParameterResolver {
             pathStr = "personalized-profiles.yaml";
         }
         Path path = Path.of(pathStr);
-        Map<String, Object> root = new HashMap<>();
-        Yaml yaml = new Yaml();
-        if (Files.exists(path)) {
-            try (InputStream is = Files.newInputStream(path)) {
-                Object loaded = yaml.load(is);
-                if (loaded instanceof Map) {
-                    root = new HashMap<>((Map<String, Object>) loaded);
+        FILE_LOCK.writeLock().lock();
+        try {
+            Map<String, Object> root = new HashMap<>();
+            Yaml yaml = new Yaml();
+            if (Files.exists(path)) {
+                try (InputStream is = Files.newInputStream(path)) {
+                    Object loaded = yaml.load(is);
+                    if (loaded instanceof Map) {
+                        root = new HashMap<>((Map<String, Object>) loaded);
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to read personalized profile for saving: {}", e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("Failed to read personalized profile for saving: {}", e.getMessage());
             }
-        }
 
-        Map<String, Object> nsConfig = (Map<String, Object>) root.computeIfAbsent(namespace, k -> new HashMap<String, Object>());
-        Map<String, Object> primConfig = (Map<String, Object>) nsConfig.computeIfAbsent(primitive, k -> new HashMap<String, Object>());
-        primConfig.putAll(params);
+            Map<String, Object> nsConfig = (Map<String, Object>) root.computeIfAbsent(namespace, k -> new HashMap<String, Object>());
+            Map<String, Object> primConfig = (Map<String, Object>) nsConfig.computeIfAbsent(primitive, k -> new HashMap<String, Object>());
+            primConfig.putAll(params);
 
-        try (java.io.Writer writer = Files.newBufferedWriter(path)) {
-            yaml.dump(root, writer);
-        } catch (Exception e) {
-            log.error("Failed to save personalized profile: {}", e.getMessage());
+            try (java.io.Writer writer = Files.newBufferedWriter(path)) {
+                yaml.dump(root, writer);
+            } catch (Exception e) {
+                log.error("Failed to save personalized profile: {}", e.getMessage());
+            }
+        } finally {
+            FILE_LOCK.writeLock().unlock();
         }
     }
 

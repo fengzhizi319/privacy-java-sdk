@@ -532,34 +532,29 @@ public class PrivacyClient {
             List<Double> sortedVals = new java.util.ArrayList<>(values);
             java.util.Collections.sort(sortedVals);
 
-            int p5Idx = (int) (n * 0.05);
-            int p95Idx = (int) (n * 0.95);
-            if (p95Idx >= n) {
-                p95Idx = n - 1;
-            }
+            // 使用 Math.floor 与 Math.ceil 保证小样本时边界安全
+            int p5Idx = Math.max(0, Math.min(n - 1, (int) Math.floor(n * 0.05)));
+            int p95Idx = Math.max(0, Math.min(n - 1, (int) Math.ceil(n * 0.95) - 1));
 
             double clipLower = sortedVals.get(p5Idx);
             double clipUpper = sortedVals.get(p95Idx);
-            if (clipLower == clipUpper) {
+            if (clipLower == clipUpper || Double.isNaN(clipLower) || Double.isNaN(clipUpper)) {
                 clipLower -= 1.0;
                 clipUpper += 1.0;
             }
 
             double recommendedDelta = 1e-5;
-            if (n > 0) {
-                double val = 1.0 / (10.0 * n * n);
-                if (val < recommendedDelta) {
-                    recommendedDelta = val;
-                }
+            double val = 1.0 / (10.0 * n * n);
+            if (val < recommendedDelta) {
+                recommendedDelta = val;
             }
 
-            Map<String, Object> dpParams = Map.of(
-                "epsilon", 1.0,
-                "delta", recommendedDelta,
-                "mechanism", "laplace",
-                "clip_lower", clipLower,
-                "clip_upper", clipUpper
-            );
+            Map<String, Object> dpParams = new HashMap<>();
+            dpParams.put("epsilon", 1.0);
+            dpParams.put("delta", recommendedDelta);
+            dpParams.put("mechanism", "laplace");
+            dpParams.put("clip_lower", clipLower);
+            dpParams.put("clip_upper", clipUpper);
             com.github.fengzhizi319.privacy.sdk.util.ParameterResolver.savePersonalizedParams(ns, "dp", dpParams);
             recommendations.put("dp", dpParams);
         }
@@ -567,17 +562,11 @@ public class PrivacyClient {
         // 2. 推荐 K-Anonymity 参数
         if (rows != null && !rows.isEmpty()) {
             int n = rows.size();
-            int recommendedK = n / 10;
-            if (recommendedK < 2) {
-                recommendedK = 2;
-            } else if (recommendedK > 10) {
-                recommendedK = 10;
-            }
+            int recommendedK = Math.max(2, Math.min(10, n / 10));
 
-            Map<String, Object> kanoParams = Map.of(
-                "k", recommendedK,
-                "max_depth", 10
-            );
+            Map<String, Object> kanoParams = new HashMap<>();
+            kanoParams.put("k", recommendedK);
+            kanoParams.put("max_depth", 10);
             com.github.fengzhizi319.privacy.sdk.util.ParameterResolver.savePersonalizedParams(ns, "k_anonymity", kanoParams);
             recommendations.put("k_anonymity", kanoParams);
         }

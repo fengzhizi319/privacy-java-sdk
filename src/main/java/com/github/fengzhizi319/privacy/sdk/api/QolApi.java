@@ -96,6 +96,9 @@ public class QolApi {
      * 内部实现：执行查询混淆并返回 QoLResult。
      */
     private QoLResult obfuscateQueryInternal(String query, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
+        if (numDummies < 0) {
+            throw new IllegalArgumentException("numDummies must be non-negative, got " + numDummies);
+        }
         boolean isMedical = "medical".equalsIgnoreCase(domain);
 
         List<String> pool;
@@ -105,7 +108,7 @@ public class QolApi {
             pool = (genericPool != null && !genericPool.isEmpty()) ? genericPool : GENERIC_DUMMY_POOL;
         }
 
-        List<String> dummies = new ArrayList<>();
+        List<String> dummies = new ArrayList<>(numDummies);
         String strategy = "length_similarity";
 
         // 尝试语义槽位替换策略 / Try semantic slot-filling strategy
@@ -141,7 +144,7 @@ public class QolApi {
             }
         }
 
-        // 长度相近抽样补齐 / Length-similarity sampling to fill remaining
+        // 长度相近抽样补齐（无放回）/ Length-similarity sampling without replacement to fill remaining
         int needed = numDummies - dummies.size();
         if (needed > 0) {
             if (!dummies.isEmpty()) {
@@ -166,6 +169,10 @@ public class QolApi {
                 closeCandidates = filteredPool;
             }
 
+            // 无放回抽样，避免重复 / Sample without replacement to avoid duplicates
+            List<String> chosen = sampleN(closeCandidates, Math.min(needed, closeCandidates.size()));
+            dummies.addAll(chosen);
+            // 若候选不足，则允许重复补齐（兜底）
             while (dummies.size() < numDummies) {
                 dummies.add(closeCandidates.get(rng().nextInt(closeCandidates.size())));
             }
@@ -180,12 +187,19 @@ public class QolApi {
     }
 
     /**
-     * 从列表中随机选取 n 个不重复元素。
+     * 从列表中随机选取 n 个不重复元素，返回新的 ArrayList（避免返回 subList 视图）。
+     * Randomly selects n distinct items and returns a new ArrayList (not a subList view).
      */
     private List<String> sampleN(List<String> items, int n) {
+        if (n <= 0) {
+            return new ArrayList<>();
+        }
+        if (n >= items.size()) {
+            return new ArrayList<>(items);
+        }
         List<String> copy = new ArrayList<>(items);
         Collections.shuffle(copy, rng());
-        return copy.subList(0, Math.min(n, copy.size()));
+        return new ArrayList<>(copy.subList(0, n));
     }
 
     /**
