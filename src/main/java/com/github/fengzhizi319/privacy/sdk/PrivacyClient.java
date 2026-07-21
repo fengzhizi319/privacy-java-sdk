@@ -2,6 +2,7 @@ package com.github.fengzhizi319.privacy.sdk;
 
 import com.github.fengzhizi319.privacy.sdk.api.DpApi;
 import com.github.fengzhizi319.privacy.sdk.api.KAnonymityApi;
+import com.github.fengzhizi319.privacy.sdk.api.LocalDpApi;
 import com.github.fengzhizi319.privacy.sdk.api.MaskingApi;
 import com.github.fengzhizi319.privacy.sdk.api.QolApi;
 import com.github.fengzhizi319.privacy.sdk.classification.ClassificationApi;
@@ -50,6 +51,9 @@ public class PrivacyClient {
     /** 数据分类 API 实例。 */
     private final ClassificationApi classificationApi;
 
+    /** 本地差分隐私 API 实例。 */
+    private final LocalDpApi localDpApi;
+
     /**
      * 使用默认空配置构造客户端。
      * <p>
@@ -78,6 +82,7 @@ public class PrivacyClient {
         this.kAnonymityApi = new KAnonymityApi();
         this.qolApi = new QolApi();
         this.classificationApi = new ClassificationApi(profile);
+        this.localDpApi = new LocalDpApi();
     }
 
     /**
@@ -94,6 +99,7 @@ public class PrivacyClient {
         this.kAnonymityApi = new KAnonymityApi();
         this.qolApi = new QolApi();
         this.classificationApi = new ClassificationApi(profile);
+        this.localDpApi = new LocalDpApi();
     }
 
     /**
@@ -157,6 +163,15 @@ public class PrivacyClient {
      */
     public ClassificationApi classification() {
         return classificationApi;
+    }
+
+    /**
+     * 获取本地差分隐私 API。
+     *
+     * @return {@link LocalDpApi} 实例
+     */
+    public LocalDpApi localDp() {
+        return localDpApi;
     }
 
     // --- 快捷原语封装方法 / Convenience Wrappers ---
@@ -236,9 +251,24 @@ public class PrivacyClient {
 
     /**
      * 在真实查询中混入若干假查询以隐藏真实意图，是 qol().obfuscateQuery 的便捷封装。
+     * 支持语义槽位替换与长度相近抽样策略。
      */
     public List<String> obfuscateQuery(String query, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
         return qolApi.obfuscateQuery(query, numDummies, domain, medicalPool, genericPool);
+    }
+
+    /**
+     * 对查询进行混淆并返回包含元数据的 QoLResult。
+     */
+    public QolApi.QoLResult obfuscateQueryWithDetails(String query, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
+        return qolApi.obfuscateQueryWithDetails(query, numDummies, domain, medicalPool, genericPool);
+    }
+
+    /**
+     * 批量对查询进行混淆。
+     */
+    public List<List<String>> obfuscateQueryBatch(List<String> queries, int numDummies, String domain, List<String> medicalPool, List<String> genericPool) {
+        return qolApi.obfuscateQueryBatch(queries, numDummies, domain, medicalPool, genericPool);
     }
 
     /**
@@ -246,6 +276,119 @@ public class PrivacyClient {
      */
     public FieldClassificationResult classifyField(String fieldName, Object value, Map<String, Object> params) {
         return classificationApi.classifyField(fieldName, value, params);
+    }
+
+    // --- 批量脱敏便捷封装 / Batch Masking Wrappers ---
+
+    /**
+     * 批量对字段值进行脱敏，是 masking().maskBatch 的便捷封装。
+     */
+    public List<String> maskBatch(List<String> fieldNames, List<String> values, String context) {
+        return maskingApi.maskBatch(fieldNames, values, context);
+    }
+
+    // --- DP 高级算子便捷封装 / DP Advanced Wrappers ---
+
+    /**
+     * 返回带差分隐私噪声的直方图计数。
+     */
+    public Map<String, Double> dpHistogram(List<String> values, List<String> categories, double epsilon, double delta, String mechanism) {
+        return dpApi.histogram(values, categories, epsilon, delta, mechanism);
+    }
+
+    /**
+     * 对已聚合计数注入 DP 噪声。
+     */
+    public double dpNoisyCount(double trueCount, double epsilon, double delta, String mechanism) {
+        return dpApi.noisyCount(trueCount, epsilon, delta, mechanism);
+    }
+
+    /**
+     * 对已聚合求和注入 DP 噪声。
+     */
+    public double dpNoisySum(double trueSum, double sensitivity, double epsilon, double delta, String mechanism) {
+        return dpApi.noisySum(trueSum, sensitivity, epsilon, delta, mechanism);
+    }
+
+    /**
+     * 对已聚合 sum/count 注入 DP 噪声后得到均值。
+     */
+    public double dpNoisyMean(double trueSum, double trueCount, double sensitivity, double epsilon, double delta, String mechanism, double minCount) {
+        return dpApi.noisyMean(trueSum, trueCount, sensitivity, epsilon, delta, mechanism, minCount);
+    }
+
+    /**
+     * 对已聚合直方图计数注入 DP 噪声。
+     */
+    public Map<String, Double> dpNoisyHistogram(Map<String, Double> trueCounts, double epsilon, double delta, String mechanism) {
+        return dpApi.noisyHistogram(trueCounts, epsilon, delta, mechanism);
+    }
+
+    /**
+     * 对高维向量执行 L2 截断并注入 DP 噪声。
+     */
+    public double[] dpVectorSum(List<double[]> vectors, double maxNorm, double epsilon, double delta, String mechanism) {
+        return dpApi.vectorSum(vectors, maxNorm, epsilon, delta, mechanism);
+    }
+
+    /**
+     * 对高维向量执行 DP 均值。
+     */
+    public double[] dpVectorMean(List<double[]> vectors, double maxNorm, double epsilon, double delta, String mechanism, double minCount) {
+        return dpApi.vectorMean(vectors, maxNorm, epsilon, delta, mechanism, minCount);
+    }
+
+    /**
+     * 使用 DP 自适应二分搜索估计截断上下界。
+     */
+    public double[] dpAdaptiveClip(List<Double> values, double epsilon, double targetQuantile, int numIterations, double initialClip) {
+        return dpApi.adaptiveClip(values, epsilon, targetQuantile, numIterations, initialClip);
+    }
+
+    /**
+     * 实现 Tau-Thresholding 差分隐私 Group-By 过滤。
+     */
+    public Map<String, Double> dpGroupBy(List<Map<String, Object>> rows, String groupCol, String targetCol, String agg, double epsilon, double delta, Double clipLower, Double clipUpper, String mechanism) {
+        return dpApi.groupBy(rows, groupCol, targetCol, agg, epsilon, delta, clipLower, clipUpper, mechanism);
+    }
+
+    // --- 本地 DP 便捷封装 / Local DP Wrappers ---
+
+    /**
+     * 批量对二值数据进行本地 DP 扰动。
+     */
+    public List<Integer> perturbBinaryBatch(List<Integer> values, double epsilon) {
+        return localDpApi.perturbBinaryBatch(values, epsilon);
+    }
+
+    /**
+     * 批量对类别型数据进行本地 DP 扰动。
+     */
+    public List<String> perturbCategoricalBatch(List<String> values, List<String> categories, double epsilon) {
+        return localDpApi.perturbCategoricalBatch(values, categories, epsilon);
+    }
+
+    /**
+     * 根据扰动后的二值样本估计真实频率。
+     */
+    public double estimateBinaryFrequency(List<Integer> reported, double epsilon) {
+        return localDpApi.estimateBinaryFrequency(reported, epsilon);
+    }
+
+    /**
+     * 根据扰动后的类别样本估计各类别真实频率。
+     */
+    public Map<String, Double> estimateCategoricalHistogram(List<String> reported, List<String> categories, double epsilon) {
+        return localDpApi.estimateCategoricalHistogram(reported, categories, epsilon);
+    }
+
+    // --- 预算查询 / Budget Query ---
+
+    /**
+     * 查询当前命名空间下剩余隐私预算。
+     */
+    public Map<String, Double> budgetRemaining() {
+        return budget.remaining();
     }
 
     /**

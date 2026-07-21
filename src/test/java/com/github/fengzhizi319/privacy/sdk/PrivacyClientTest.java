@@ -13,7 +13,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PrivacyClientTest {
 
-    private final PrivacyClient client = new PrivacyClient();
+    private final PrivacyClient client = new PrivacyClient(
+            PrivacyProfile.empty(),
+            com.github.fengzhizi319.privacy.sdk.util.BudgetAccountant.getInstance("test-client", 1000.0, 1.0)
+    );
 
     @Test
     void testMaskingWrappers() {

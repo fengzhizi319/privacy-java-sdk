@@ -61,6 +61,8 @@ public class MaskingApi {
             case "id_card" -> maskIdCard(value);
             case "name" -> maskName(value);
             case "bank_card" -> maskBankCard(value);
+            case "email" -> maskEmail(value);
+            case "address" -> maskAddress(value);
             default -> maskDefault(value, 3, 3);
         };
     }
@@ -158,6 +160,43 @@ public class MaskingApi {
     }
 
     /**
+     * 邮箱地址掩码：保留用户名首字符与域名，中间替换为 ***。
+     * <p>例如 "zhangsan@example.com" → "z***@example.com"。</p>
+     *
+     * @param value 原始邮箱地址
+     * @return 掩码后的邮箱地址
+     */
+    private String maskEmail(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        int atIdx = value.indexOf('@');
+        if (atIdx <= 0) {
+            return maskDefault(value, 2, 2);
+        }
+        String local = value.substring(0, atIdx);
+        String domain = value.substring(atIdx);
+        if (local.length() <= 1) {
+            return local + "***" + domain;
+        }
+        return local.charAt(0) + "***" + domain;
+    }
+
+    /**
+     * 地址掩码：保留前 6 个字符，其余替换为 ***。
+     * <p>例如 "北京市朝阳区建国路88号" → "北京市朝阳区***"。</p>
+     *
+     * @param value 原始地址
+     * @return 掩码后的地址
+     */
+    private String maskAddress(String value) {
+        if (value == null || value.length() <= 6) {
+            return value;
+        }
+        return value.substring(0, 6) + "***";
+    }
+
+    /**
      * 默认掩码规则：保留前后指定长度，中间替换为 *。
      *
      * @param value  原始字符串
@@ -181,11 +220,12 @@ public class MaskingApi {
     /**
      * 根据字段名推断敏感字段类型。
      * <p>
-     * 规则基于关键字匹配（不区分大小写），命中顺序为：mobile/phone、id_card/idcard/身份证、name/姓名、bank/card_no。
+     * 规则基于关键字匹配（不区分大小写），支持识别：
+     * mobile/phone、id_card/idcard/身份证、name/姓名、bank/card_no、email/mail/邮箱、address/addr/地址/住址。
      * </p>
      *
      * @param fieldName 字段名
-     * @return 类型标识字符串，如 "mobile"、"id_card"、"name"、"bank_card"、"default"
+     * @return 类型标识字符串
      */
     private String guessFieldType(String fieldName) {
         String lower = fieldName.toLowerCase();
@@ -201,7 +241,33 @@ public class MaskingApi {
         if (lower.contains("bank") || lower.contains("card_no")) {
             return "bank_card";
         }
+        if (lower.contains("email") || lower.contains("mail") || lower.contains("邮箱")) {
+            return "email";
+        }
+        if (lower.contains("address") || lower.contains("addr") || lower.contains("地址") || lower.contains("住址")) {
+            return "address";
+        }
         return "default";
+    }
+
+    /**
+     * 批量对字段值进行脱敏。fieldNames 与 values 按下标一一对应。
+     *
+     * @param fieldNames 字段名列表
+     * @param values     待脱敏值列表
+     * @param context    业务上下文标识
+     * @return 脱敏后的值列表
+     */
+    public java.util.List<String> maskBatch(java.util.List<String> fieldNames, java.util.List<String> values, String context) {
+        if (fieldNames == null || values == null) {
+            return new java.util.ArrayList<>();
+        }
+        int n = Math.min(fieldNames.size(), values.size());
+        java.util.List<String> result = new java.util.ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            result.add(maskValue(fieldNames.get(i), values.get(i), context));
+        }
+        return result;
     }
 
     /**
