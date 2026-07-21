@@ -1,6 +1,8 @@
 package com.github.fengzhizi319.privacy.sdk.util;
 
 import com.github.fengzhizi319.privacy.sdk.model.PrivacyContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -28,6 +30,8 @@ import java.util.Map;
  * @since 0.1.0
  */
 public class ParameterResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(ParameterResolver.class);
 
     /** 从 YAML 加载的原始 profile 配置映射。 */
     private final Map<String, Object> profile;
@@ -128,7 +132,7 @@ public class ParameterResolver {
                     }
                 }
             } catch (Exception e) {
-                System.err.println("[-] Warning: Failed to load personalized profile: " + e.getMessage());
+                log.warn("Failed to load personalized profile: {}", e.getMessage());
             }
         }
         return new HashMap<>();
@@ -152,7 +156,7 @@ public class ParameterResolver {
                     root = new HashMap<>((Map<String, Object>) loaded);
                 }
             } catch (Exception e) {
-                System.err.println("[-] Warning: Failed to read personalized profile for saving: " + e.getMessage());
+                log.warn("Failed to read personalized profile for saving: {}", e.getMessage());
             }
         }
 
@@ -163,7 +167,7 @@ public class ParameterResolver {
         try (java.io.Writer writer = Files.newBufferedWriter(path)) {
             yaml.dump(root, writer);
         } catch (Exception e) {
-            System.err.println("[-] Error: Failed to save personalized profile: " + e.getMessage());
+            log.error("Failed to save personalized profile: {}", e.getMessage());
         }
     }
 

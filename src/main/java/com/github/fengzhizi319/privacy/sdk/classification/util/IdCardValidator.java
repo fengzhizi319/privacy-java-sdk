@@ -11,7 +11,11 @@ import java.util.regex.Pattern;
  * @author fengzhizi319
  * @since 0.1.0
  */
-public class IdCardValidator {
+public final class IdCardValidator {
+
+    private IdCardValidator() {
+        // 工具类，禁止实例化
+    }
 
     /** 18 位身份证正则表达式。 */
     private static final Pattern ID_CARD_PATTERN = Pattern.compile(

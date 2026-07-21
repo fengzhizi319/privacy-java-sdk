@@ -3,7 +3,6 @@ package com.github.fengzhizi319.privacy.sdk.api;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Map;
 

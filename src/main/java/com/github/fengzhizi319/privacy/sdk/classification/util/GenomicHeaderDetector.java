@@ -11,7 +11,11 @@ import java.util.regex.Pattern;
  * @author fengzhizi319
  * @since 0.1.0
  */
-public class GenomicHeaderDetector {
+public final class GenomicHeaderDetector {
+
+    private GenomicHeaderDetector() {
+        // 工具类，禁止实例化
+    }
 
     /** 长基因序列片段正则：至少 50 个 ATCGN（大小写均可）。 */
     private static final Pattern SEQUENCE_PATTERN = Pattern.compile("[ATCGNatcgn]{50,}");

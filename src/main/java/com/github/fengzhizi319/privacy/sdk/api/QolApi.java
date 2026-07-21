@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 查询混淆 API（Query Obfuscation Layer API）。
@@ -13,20 +14,21 @@ import java.util.Random;
  * 支持语义槽位替换（Slot-Filling）与长度相近抽样（Length-Similarity）两种混淆策略。
  * 所有计算纯本地完成，不依赖外部网络。
  * </p>
+ * <p>本类线程安全：默认使用 {@link ThreadLocalRandom}，测试时可注入固定种子的 {@link Random}。</p>
  *
  * @author fengzhizi319
  * @since 0.1.0
  */
 public class QolApi {
 
-    /** 用于选择 dummy 查询与插入位置的随机数生成器。 */
+    /** 用于选择 dummy 查询与插入位置的随机数生成器。为 null 时使用 ThreadLocalRandom。 */
     private final Random random;
 
     /**
-     * 使用默认随机数生成器构造 API。
+     * 使用默认随机数生成器构造 API（ThreadLocalRandom，线程安全）。
      */
     public QolApi() {
-        this.random = new Random();
+        this.random = null;
     }
 
     /**
@@ -36,6 +38,11 @@ public class QolApi {
      */
     public QolApi(Random random) {
         this.random = random;
+    }
+
+    /** 获取当前线程安全的随机数生成器。 */
+    private Random rng() {
+        return random != null ? random : ThreadLocalRandom.current();
     }
 
     /**
@@ -160,12 +167,12 @@ public class QolApi {
             }
 
             while (dummies.size() < numDummies) {
-                dummies.add(closeCandidates.get(random.nextInt(closeCandidates.size())));
+                dummies.add(closeCandidates.get(rng().nextInt(closeCandidates.size())));
             }
         }
 
         // 将真实查询随机插入 / Insert real query at random position
-        int pos = random.nextInt(dummies.size() + 1);
+        int pos = rng().nextInt(dummies.size() + 1);
         List<String> result = new ArrayList<>(dummies);
         result.add(pos, query);
 
@@ -177,7 +184,7 @@ public class QolApi {
      */
     private List<String> sampleN(List<String> items, int n) {
         List<String> copy = new ArrayList<>(items);
-        Collections.shuffle(copy, random);
+        Collections.shuffle(copy, rng());
         return copy.subList(0, Math.min(n, copy.size()));
     }
 

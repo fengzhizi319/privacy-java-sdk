@@ -103,6 +103,78 @@ public class PrivacyClient {
     }
 
     /**
+     * 创建 Builder 实例，用于流式配置并构建 PrivacyClient。
+     *
+     * @return 新的 {@link Builder} 实例
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * PrivacyClient 的流式构建器。
+     * <p>
+     * 示例用法：
+     * <pre>{@code
+     * PrivacyClient client = PrivacyClient.builder()
+     *     .namespace("my-app")
+     *     .epsilon(5.0)
+     *     .delta(1e-5)
+     *     .profile(PrivacyProfile.fromYaml("privacy.yaml"))
+     *     .build();
+     * }</pre>
+     * </p>
+     */
+    public static class Builder {
+        private PrivacyProfile profile = PrivacyProfile.empty();
+        private BudgetAccountant budget;
+        private String namespace = "default";
+        private double epsilon = 10.0;
+        private double delta = 1e-4;
+
+        Builder() {}
+
+        /** 设置隐私配置 profile。 */
+        public Builder profile(PrivacyProfile profile) {
+            this.profile = profile;
+            return this;
+        }
+
+        /** 设置预算命名空间。 */
+        public Builder namespace(String namespace) {
+            this.namespace = namespace;
+            return this;
+        }
+
+        /** 设置 epsilon 总预算。 */
+        public Builder epsilon(double epsilon) {
+            this.epsilon = epsilon;
+            return this;
+        }
+
+        /** 设置 delta 总预算。 */
+        public Builder delta(double delta) {
+            this.delta = delta;
+            return this;
+        }
+
+        /** 直接指定预算记账本（优先级高于 namespace/epsilon/delta）。 */
+        public Builder budget(BudgetAccountant budget) {
+            this.budget = budget;
+            return this;
+        }
+
+        /** 构建 PrivacyClient 实例。 */
+        public PrivacyClient build() {
+            BudgetAccountant b = this.budget;
+            if (b == null) {
+                b = BudgetAccountant.getInstance(namespace, epsilon, delta);
+            }
+            return new PrivacyClient(profile, b);
+        }
+    }
+
+    /**
      * 获取当前客户端关联的隐私配置。
      *
      * @return {@link PrivacyProfile} 实例，不会为 {@code null}

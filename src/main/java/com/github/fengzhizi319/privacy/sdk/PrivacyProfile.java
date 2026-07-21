@@ -14,7 +14,7 @@ import java.nio.file.Paths;
  * @author fengzhizi319
  * @since 0.1.0
  */
-public class PrivacyProfile {
+public final class PrivacyProfile {
 
     /** 内部参数解析器，负责合并默认值、profile 配置、上下文与请求参数。 */
     private final ParameterResolver resolver;

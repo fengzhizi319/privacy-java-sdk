@@ -1,5 +1,6 @@
 package com.github.fengzhizi319.privacy.sdk.model;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +15,9 @@ import java.util.Map;
  * @author fengzhizi319
  * @since 0.1.0
  */
-public class PrivacyResult<T> {
+public class PrivacyResult<T> implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /** 隐私计算返回的核心数据。 */
     private final T data;
@@ -53,29 +56,29 @@ public class PrivacyResult<T> {
     }
 
     /**
-     * 获取实际使用的参数映射。
+     * 获取实际使用的参数映射（不可变视图）。
      *
      * @return 参数映射
      */
     public Map<String, Object> getParamsUsed() {
-        return paramsUsed;
+        return paramsUsed == null ? Collections.emptyMap() : Collections.unmodifiableMap(paramsUsed);
     }
 
     /**
-     * 获取可审计证明信息。
+     * 获取可审计证明信息（不可变视图）。
      *
      * @return 证明信息映射
      */
     public Map<String, Object> getProof() {
-        return proof;
+        return proof == null ? Collections.emptyMap() : Collections.unmodifiableMap(proof);
     }
 
     /**
-     * 获取警告信息列表。
+     * 获取警告信息列表（不可变视图）。
      *
      * @return 警告信息列表，不会为 {@code null}
      */
     public List<String> getWarnings() {
-        return warnings;
+        return Collections.unmodifiableList(warnings);
     }
 }

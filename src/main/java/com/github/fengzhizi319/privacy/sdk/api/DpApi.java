@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 差分隐私 API（Differential Privacy API）。
@@ -14,6 +15,7 @@ import java.util.Random;
  * 提供计数（count）、求和（sum）、均值（mean）等聚合统计量的加噪能力，支持拉普拉斯（Laplace）与高斯（Gaussian）机制。
  * 并通过 {@link BudgetAccountant} 记录隐私预算消耗。
  * </p>
+ * <p>本类线程安全：默认使用 {@link ThreadLocalRandom}，测试时可注入固定种子的 {@link Random}。</p>
  *
  * @author fengzhizi319
  * @since 0.1.0
@@ -23,13 +25,14 @@ public class DpApi {
     /** 隐私预算记账本，用于追踪 epsilon/delta 消耗。 */
     private final BudgetAccountant budget;
 
-    /** 随机数生成器，用于采样随机噪声。 */
+    /** 随机数生成器，用于采样随机噪声。为 null 时使用 ThreadLocalRandom（线程安全且无竞争）。 */
     private final Random random;
 
     /**
      * 使用默认预算构造 API。
      * <p>
      * 默认预算 namespace 为 "default"，epsilon=10.0，delta=1e-4。
+     * 随机数使用 {@link ThreadLocalRandom}，线程安全且高并发无锁竞争。
      * </p>
      */
     public DpApi() {
@@ -37,12 +40,13 @@ public class DpApi {
     }
 
     /**
-     * 使用指定预算构造 API，随机数生成器使用默认 {@link Random}。
+     * 使用指定预算构造 API，随机数使用 ThreadLocalRandom。
      *
      * @param budget 隐私预算记账本
      */
     public DpApi(BudgetAccountant budget) {
-        this(budget, new Random());
+        this.budget = budget;
+        this.random = null; // use ThreadLocalRandom
     }
 
     /**
@@ -54,6 +58,11 @@ public class DpApi {
     public DpApi(BudgetAccountant budget, Random random) {
         this.budget = budget;
         this.random = random;
+    }
+
+    /** 获取当前线程安全的随机数生成器。 */
+    private Random rng() {
+        return random != null ? random : ThreadLocalRandom.current();
     }
 
     /**
@@ -182,7 +191,7 @@ public class DpApi {
      * 从拉普拉斯分布中采样一个随机噪声值。
      */
     private double sampleLaplace(double scale) {
-        double u = random.nextDouble() - 0.5;
+        double u = rng().nextDouble() - 0.5;
         return -scale * Math.signum(u) * Math.log(1 - 2 * Math.abs(u));
     }
 
@@ -190,7 +199,7 @@ public class DpApi {
      * 从高斯分布中采样一个随机噪声值。
      */
     private double sampleGaussian(double sigma) {
-        return random.nextGaussian() * sigma;
+        return rng().nextGaussian() * sigma;
     }
 
     // --- 高级 DP 算子 / Advanced DP Primitives ---

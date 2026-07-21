@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 本地差分隐私 API（Local Differential Privacy API）。
@@ -15,20 +16,21 @@ import java.util.Random;
  * <p>
  * 与中心化 DP 不同，本地 DP 在数据持有者侧即完成扰动，无需可信聚合器。
  * </p>
+ * <p>本类线程安全：默认使用 {@link ThreadLocalRandom}，测试时可注入固定种子的 {@link Random}。</p>
  *
  * @author fengzhizi319
  * @since 0.2.0
  */
 public class LocalDpApi {
 
-    /** 随机数生成器，用于随机响应中的硬币投掷。 */
+    /** 随机数生成器。为 null 时使用 ThreadLocalRandom（线程安全且无竞争）。 */
     private final Random random;
 
     /**
-     * 使用默认随机数生成器构造 API。
+     * 使用默认随机数生成器构造 API（ThreadLocalRandom，线程安全）。
      */
     public LocalDpApi() {
-        this(new Random());
+        this.random = null;
     }
 
     /**
@@ -38,6 +40,11 @@ public class LocalDpApi {
      */
     public LocalDpApi(Random random) {
         this.random = random;
+    }
+
+    /** 获取当前线程安全的随机数生成器。 */
+    private Random rng() {
+        return random != null ? random : ThreadLocalRandom.current();
     }
 
     /**
@@ -59,7 +66,7 @@ public class LocalDpApi {
 
         List<Integer> result = new ArrayList<>(values.size());
         for (int v : values) {
-            if (random.nextDouble() < p) {
+            if (rng().nextDouble() < p) {
                 // 保留真实值 / Keep true value
                 result.add(v);
             } else {
@@ -102,7 +109,7 @@ public class LocalDpApi {
 
         List<String> result = new ArrayList<>(values.size());
         for (String v : values) {
-            if (random.nextDouble() < p) {
+            if (rng().nextDouble() < p) {
                 // 保留真实类别 / Keep true category
                 result.add(v);
             } else {
@@ -110,10 +117,10 @@ public class LocalDpApi {
                 Integer origIdx = catIndex.get(v);
                 if (origIdx == null) {
                     // 未知类别，随机选一个 / Unknown category, pick random
-                    result.add(categories.get(random.nextInt(k)));
+                    result.add(categories.get(rng().nextInt(k)));
                 } else {
                     // 生成 [0, k-2] 范围内的随机索引，映射到排除 origIdx 后的类别
-                    int r = random.nextInt(k - 1);
+                    int r = rng().nextInt(k - 1);
                     if (r >= origIdx) {
                         r++;
                     }

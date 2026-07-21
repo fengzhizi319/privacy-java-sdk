@@ -11,7 +11,11 @@ import java.util.regex.Pattern;
  * @author fengzhizi319
  * @since 0.1.0
  */
-public class Icd10Matcher {
+public final class Icd10Matcher {
+
+    private Icd10Matcher() {
+        // 工具类，禁止实例化
+    }
 
     /** ICD-10 编码格式：1 位字母 + 2 位数字，可选小数点后 0~2 位数字。 */
     private static final Pattern ICD10_PATTERN = Pattern.compile("^[A-Z][0-9]{2}(\\.?[0-9]{0,2})?$");
